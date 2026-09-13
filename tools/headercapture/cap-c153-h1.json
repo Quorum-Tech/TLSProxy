@@ -1,6 +1,89 @@
 [
  {
   "proto": "h1",
+  "path": "/r/nav",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "sec-ch-ua-platform",
+   "Upgrade-Insecure-Requests",
+   "User-Agent",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-User",
+   "Sec-Fetch-Dest",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "upgrade-insecure-requests": "1",
+   "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+   "sec-fetch-site": "none",
+   "sec-fetch-mode": "navigate",
+   "sec-fetch-user": "?1",
+   "sec-fetch-dest": "document"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/after-nav",
+  "names": [
+   "Host",
+   "Connection",
+   "Upgrade-Insecure-Requests",
+   "User-Agent",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-User",
+   "Sec-Fetch-Dest",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "sec-ch-ua-platform",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "upgrade-insecure-requests": "1",
+   "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+   "sec-fetch-site": "none",
+   "sec-fetch-mode": "navigate",
+   "sec-fetch-user": "?1",
+   "sec-fetch-dest": "document"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/favicon.ico",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "no-cors",
+   "sec-fetch-dest": "image",
+   "referer": "http://127.0.0.1:25462/after-nav"
+  }
+ },
+ {
+  "proto": "h1",
   "path": "/",
   "names": [
    "Host",
@@ -51,7 +134,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "no-cors",
    "sec-fetch-dest": "style",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -78,36 +161,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "no-cors",
    "sec-fetch-dest": "script",
-   "referer": "http://localhost:38952/"
-  }
- },
- {
-  "proto": "h1",
-  "path": "/font.woff2",
-  "names": [
-   "Host",
-   "Connection",
-   "Origin",
-   "sec-ch-ua-platform",
-   "User-Agent",
-   "sec-ch-ua",
-   "sec-ch-ua-mobile",
-   "Accept",
-   "Sec-Fetch-Site",
-   "Sec-Fetch-Mode",
-   "Sec-Fetch-Dest",
-   "Referer",
-   "Accept-Encoding",
-   "Accept-Language",
-   "Cookie"
-  ],
-  "values": {
-   "origin": "http://localhost:38952",
-   "accept": "*/*",
-   "sec-fetch-site": "same-origin",
-   "sec-fetch-mode": "cors",
-   "sec-fetch-dest": "font",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -135,7 +189,63 @@
    "sec-fetch-mode": "no-cors",
    "sec-fetch-dest": "image",
    "sec-fetch-storage-access": "active",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/font.woff2",
+  "names": [
+   "Host",
+   "Connection",
+   "Origin",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "origin": "http://localhost:25462",
+   "accept": "*/*",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "cors",
+   "sec-fetch-dest": "font",
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/r/img",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "no-cors",
+   "sec-fetch-dest": "image",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -159,39 +269,12 @@
    "Cookie"
   ],
   "values": {
-   "origin": "http://localhost:38952",
+   "origin": "http://localhost:25462",
    "accept": "*/*",
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "script",
-   "referer": "http://localhost:38952/"
-  }
- },
- {
-  "proto": "h1",
-  "path": "/api/fetch",
-  "names": [
-   "Host",
-   "Connection",
-   "sec-ch-ua-platform",
-   "User-Agent",
-   "sec-ch-ua",
-   "sec-ch-ua-mobile",
-   "Accept",
-   "Sec-Fetch-Site",
-   "Sec-Fetch-Mode",
-   "Sec-Fetch-Dest",
-   "Referer",
-   "Accept-Encoding",
-   "Accept-Language",
-   "Cookie"
-  ],
-  "values": {
-   "accept": "*/*",
-   "sec-fetch-site": "same-origin",
-   "sec-fetch-mode": "cors",
-   "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -218,12 +301,12 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "no-cors",
    "sec-fetch-dest": "image",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
   "proto": "h1",
-  "path": "/api/xhr",
+  "path": "/api/fetch",
   "names": [
    "Host",
    "Connection",
@@ -245,7 +328,34 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/r/fetch",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "accept": "*/*",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "cors",
+   "sec-fetch-dest": "empty",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -272,7 +382,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -301,7 +411,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -330,7 +440,35 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/api/fetch-cross",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Origin",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "accept": "*/*",
+   "origin": "http://localhost:25462",
+   "sec-fetch-site": "cross-site",
+   "sec-fetch-mode": "cors",
+   "sec-fetch-dest": "empty",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -357,16 +495,16 @@
   "values": {
    "content-type": "text/plain",
    "accept": "*/*",
-   "origin": "http://localhost:38952",
+   "origin": "http://localhost:25462",
    "sec-fetch-site": "cross-site",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
   "proto": "h1",
-  "path": "/api/fetch-cross",
+  "path": "/after-img.png",
   "names": [
    "Host",
    "Connection",
@@ -375,21 +513,21 @@
    "sec-ch-ua",
    "sec-ch-ua-mobile",
    "Accept",
-   "Origin",
    "Sec-Fetch-Site",
    "Sec-Fetch-Mode",
    "Sec-Fetch-Dest",
+   "Sec-Fetch-Storage-Access",
    "Referer",
    "Accept-Encoding",
    "Accept-Language"
   ],
   "values": {
-   "accept": "*/*",
-   "origin": "http://localhost:38952",
+   "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
    "sec-fetch-site": "cross-site",
-   "sec-fetch-mode": "cors",
-   "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "sec-fetch-mode": "no-cors",
+   "sec-fetch-dest": "image",
+   "sec-fetch-storage-access": "active",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -417,11 +555,66 @@
   "values": {
    "content-type": "application/json",
    "accept": "*/*",
-   "origin": "http://localhost:38952",
+   "origin": "http://localhost:25462",
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "cors",
    "sec-fetch-dest": "empty",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/api/after-fetch",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Origin",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "accept": "*/*",
+   "origin": "http://localhost:25462",
+   "sec-fetch-site": "cross-site",
+   "sec-fetch-mode": "cors",
+   "sec-fetch-dest": "empty",
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/api/xhr",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua-platform",
+   "User-Agent",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "accept": "*/*",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "cors",
+   "sec-fetch-dest": "empty",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -450,7 +643,96 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "navigate",
    "sec-fetch-dest": "iframe",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/r/frame",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "sec-ch-ua-platform",
+   "Upgrade-Insecure-Requests",
+   "User-Agent",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language",
+   "Cookie"
+  ],
+  "values": {
+   "upgrade-insecure-requests": "1",
+   "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+   "sec-fetch-site": "same-origin",
+   "sec-fetch-mode": "navigate",
+   "sec-fetch-dest": "iframe",
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/after-frame",
+  "names": [
+   "Host",
+   "Connection",
+   "Upgrade-Insecure-Requests",
+   "User-Agent",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Sec-Fetch-Storage-Access",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "sec-ch-ua-platform",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "upgrade-insecure-requests": "1",
+   "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+   "sec-fetch-site": "cross-site",
+   "sec-fetch-mode": "navigate",
+   "sec-fetch-dest": "iframe",
+   "sec-fetch-storage-access": "active",
+   "referer": "http://localhost:25462/"
+  }
+ },
+ {
+  "proto": "h1",
+  "path": "/cross-frame",
+  "names": [
+   "Host",
+   "Connection",
+   "sec-ch-ua",
+   "sec-ch-ua-mobile",
+   "sec-ch-ua-platform",
+   "Upgrade-Insecure-Requests",
+   "User-Agent",
+   "Accept",
+   "Sec-Fetch-Site",
+   "Sec-Fetch-Mode",
+   "Sec-Fetch-Dest",
+   "Sec-Fetch-Storage-Access",
+   "Referer",
+   "Accept-Encoding",
+   "Accept-Language"
+  ],
+  "values": {
+   "upgrade-insecure-requests": "1",
+   "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+   "sec-fetch-site": "cross-site",
+   "sec-fetch-mode": "navigate",
+   "sec-fetch-dest": "iframe",
+   "sec-fetch-storage-access": "active",
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -477,7 +759,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "no-cors",
    "sec-fetch-dest": "image",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  },
  {
@@ -506,7 +788,7 @@
    "sec-fetch-site": "same-origin",
    "sec-fetch-mode": "navigate",
    "sec-fetch-dest": "document",
-   "referer": "http://localhost:38952/"
+   "referer": "http://localhost:25462/"
   }
  }
 ]

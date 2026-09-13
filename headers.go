@@ -143,7 +143,12 @@ func refererValue(ref, target *url.URL) string {
 // preset header's value in place; for fetch and XHR, the ones a script sets itself
 // (accept, content-type, anything else) sit where Chrome puts script-set headers.
 // A cookie header goes in Chrome's cookie slot.
-func presetHeaders(preset string, target *url.URL, method, referer string, custom map[string]string) (fhttp.Header, error) {
+//
+// chain is the addresses already visited on the way to target when a redirect led here (nil
+// for the first request). Chrome judges Sec-Fetch-Site across the whole chain, sends Origin
+// as "null" once a hop has crossed origins, and a cookie the caller set for the first address
+// is not sent to another origin.
+func presetHeaders(preset string, target *url.URL, method, referer string, custom map[string]string, chain []*url.URL) (fhttp.Header, error) {
 	k, ok := kinds[preset]
 	if !ok {
 		return nil, errUnknownPreset
@@ -183,19 +188,51 @@ func presetHeaders(preset string, target *url.URL, method, referer string, custo
 		return fallback
 	}
 
-	site := siteOf(ref, target, k.navigation)
-	refValue := refererValue(ref, target)
-	originURL := target
-	if ref != nil {
-		originURL = ref
+	// every address of the request, the first one first
+	urls := append(append([]*url.URL{}, chain...), target)
+	// the page a request comes from; with none, the first address stands in for it
+	base := ref
+	if base == nil {
+		base = urls[0]
 	}
-	origin := originURL.Scheme + "://" + originURL.Host
-	lateOrigin := k.scripted && (hasBody || (ref != nil && !sameOrigin(ref, target)))
+	site := siteOf(ref, target, k.navigation)
+	if site != "none" {
+		// the most cross-site of every hop
+		rank := map[string]int{"same-origin": 0, "same-site": 1, "cross-site": 2}
+		for _, u := range urls {
+			if s := siteOf(base, u, false); rank[s] > rank[site] {
+				site = s
+			}
+		}
+	}
+	// Fetch's tainted origin: a redirect from an address outside the page's origin to another
+	// one outside it makes Origin "null". A same-origin address redirecting away does not (Chrome
+	// 153 sent the page's origin after exactly that redirect).
+	tainted := false
+	crossedOrigin := false // some hop changed origin
+	for i := 1; i < len(urls); i++ {
+		if !sameOrigin(base, urls[i]) && !sameOrigin(base, urls[i-1]) {
+			tainted = true
+		}
+		if !sameOrigin(urls[i-1], urls[i]) {
+			crossedOrigin = true
+		}
+	}
+	refValue := refererValue(ref, target)
+	origin := base.Scheme + "://" + base.Host
+	if tainted {
+		origin = "null"
+	}
+	lateOrigin := k.scripted && (hasBody || !sameOrigin(base, target))
 	storageAccess := k.mode == "no-cors" && !k.navigation && site == "cross-site"
 
 	var list []header
 	add := func(name, v string) { list = append(list, header{name, v}) }
 	cookie, hasCookie := take("cookie")
+	if hasCookie && !sameOrigin(urls[0], target) {
+		// the caller's cookie belongs to the first address, not to wherever a redirect went
+		hasCookie = false
+	}
 	scriptAccept, hasScriptAccept := "", false
 	scriptType, hasScriptType := "", false
 	if k.scripted {
@@ -204,9 +241,16 @@ func presetHeaders(preset string, target *url.URL, method, referer string, custo
 	}
 
 	if k.navigation {
-		add("sec-ch-ua", value("sec-ch-ua", secChUa(chromeMajor)))
-		add("sec-ch-ua-mobile", value("sec-ch-ua-mobile", "?0"))
-		add("sec-ch-ua-platform", value("sec-ch-ua-platform", `"macOS"`))
+		hints := func() {
+			add("sec-ch-ua", value("sec-ch-ua", secChUa(chromeMajor)))
+			add("sec-ch-ua-mobile", value("sec-ch-ua-mobile", "?0"))
+			add("sec-ch-ua-platform", value("sec-ch-ua-platform", `"macOS"`))
+		}
+		// Chrome removes the client hints when a navigation is redirected to another origin
+		// and adds them back after the fetch metadata (captured from Chrome 153)
+		if !crossedOrigin {
+			hints()
+		}
 		add("Upgrade-Insecure-Requests", value("Upgrade-Insecure-Requests", "1"))
 		add("User-Agent", value("User-Agent", userAgent(chromeMajor)))
 		add("Accept", value("Accept", k.accept))
@@ -216,6 +260,13 @@ func presetHeaders(preset string, target *url.URL, method, referer string, custo
 			add("Sec-Fetch-User", value("Sec-Fetch-User", "?1"))
 		}
 		add("Sec-Fetch-Dest", value("Sec-Fetch-Dest", k.dest))
+		if k.dest == "iframe" && site == "cross-site" {
+			// a cross-site frame reports its storage access, as a cross-site subresource does
+			add("Sec-Fetch-Storage-Access", value("Sec-Fetch-Storage-Access", "active"))
+		}
+		if crossedOrigin {
+			hints()
+		}
 	} else {
 		if k.earlyOrigin {
 			add("Origin", value("Origin", origin))

@@ -61,17 +61,17 @@ func TestSiteRefererAndOrigin(t *testing.T) {
 	if siteOf(nil, u("https://example.com/"), true) != "none" {
 		t.Error("a typed navigation is site none")
 	}
-	h, err := presetHeaders("fetch", u("https://api.other.com/v1"), "POST", "https://www.example.co.uk/app", map[string]string{"Content-Type": "application/json"})
+	h, err := presetHeaders("fetch", u("https://api.other.com/v1"), "POST", "https://www.example.co.uk/app", map[string]string{"Content-Type": "application/json"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if h.Get("Origin") != "https://www.example.co.uk" || h.Get("Sec-Fetch-Site") != "cross-site" || h.Get("Referer") != "https://www.example.co.uk/" {
 		t.Errorf("cross-site POST: origin %q site %q referer %q", h.Get("Origin"), h.Get("Sec-Fetch-Site"), h.Get("Referer"))
 	}
-	if _, err := presetHeaders("image", u("https://example.com/a.png"), "POST", "", nil); err != errPresetMethod {
+	if _, err := presetHeaders("image", u("https://example.com/a.png"), "POST", "", nil, nil); err != errPresetMethod {
 		t.Errorf("an image with a body: %v", err)
 	}
-	if _, err := presetHeaders("script", u("https://example.com/a.js"), "GET", "javascript:alert(1)", nil); err != errBadReferer {
+	if _, err := presetHeaders("script", u("https://example.com/a.js"), "GET", "javascript:alert(1)", nil, nil); err != errBadReferer {
 		t.Errorf("a referer that is not a web address: %v", err)
 	}
 }
@@ -223,6 +223,96 @@ func TestRequestProxyCarriesTheRequest(t *testing.T) {
 	}
 	if sawAuth == "" {
 		t.Error("the proxy saw no credentials")
+	}
+}
+
+// A preset request follows a redirect itself and sends what Chrome sends at the new address:
+// the site judged across the chain, the page's own Origin (a same-origin address redirecting
+// away does not taint it: Chrome 153 sent it so), the referer trimmed to its origin, and no
+// cookie meant for the first address.
+func TestPresetRedirectRecomputesFetchMetadata(t *testing.T) {
+	var got http.Header
+	after := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		w.Write([]byte("after"))
+	}))
+	defer after.Close()
+	crossURL := strings.Replace(after.URL, "127.0.0.1", "localhost", 1) + "/after"
+	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, crossURL, http.StatusFound)
+	}))
+	defer first.Close()
+	rec := call(t, map[string]any{"url": first.URL + "/r", "preset": "fetch", "referer": first.URL + "/page", "isolated": true,
+		"headers": map[string]string{"cookie": "session=secret"}})
+	if rec.Code != 200 || rec.Body.String() != "after" {
+		t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+	}
+	if got.Get("Sec-Fetch-Site") != "cross-site" || got.Get("Origin") != first.URL || got.Get("Referer") != first.URL+"/" || got.Get("Cookie") != "" {
+		t.Errorf("after a cross-site redirect: site %q origin %q referer %q cookie %q",
+			got.Get("Sec-Fetch-Site"), got.Get("Origin"), got.Get("Referer"), got.Get("Cookie"))
+	}
+}
+
+// Origin becomes "null" only when a redirect goes from an address outside the page's origin
+// to another address outside it (Fetch's tainted origin).
+func TestTaintedOriginAfterRedirectBetweenOtherOrigins(t *testing.T) {
+	u := func(s string) *url.URL { v, _ := url.Parse(s); return v }
+	page := "https://app.example.com/dashboard"
+	h, err := presetHeaders("fetch", u("https://c.other.net/data"), "GET", page, nil, []*url.URL{u("https://b.elsewhere.org/r")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Get("Origin") != "null" {
+		t.Errorf("redirect between two other origins: origin %q", h.Get("Origin"))
+	}
+	h, _ = presetHeaders("fetch", u("https://c.other.net/data"), "GET", page, nil, []*url.URL{u("https://app.example.com/r")})
+	if h.Get("Origin") != "https://app.example.com" {
+		t.Errorf("same-origin address redirecting away: origin %q", h.Get("Origin"))
+	}
+}
+
+func TestTokenAndBinding(t *testing.T) {
+	old := token
+	token = "s3cret"
+	defer func() { token = old }()
+	h := guard(ProxyHandler)
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest("POST", "/proxy", strings.NewReader(`{}`)))
+	if rec.Code != 401 {
+		t.Errorf("no token: %d", rec.Code)
+	}
+	req := httptest.NewRequest("POST", "/proxy", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer s3cret")
+	rec = httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != 400 { // past the guard: no_url_provided
+		t.Errorf("with the token: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, c := range []struct {
+		addr, tok, allow string
+		ok               bool
+	}{
+		{"127.0.0.1:7738", "", "", true},
+		{"localhost:7738", "", "", true},
+		{"[::1]:7738", "", "", true},
+		{"0.0.0.0:7738", "", "", false},
+		{":7738", "", "", false},
+		{"172.17.0.1:7738", "", "", false},
+		{"172.17.0.1:7738", "t", "", true},
+		{"172.17.0.1:7738", "", "1", true},
+	} {
+		if err := bindAllowed(c.addr, c.tok, c.allow); (err == nil) != c.ok {
+			t.Errorf("%s token=%q allow=%q: %v", c.addr, c.tok, c.allow, err)
+		}
+	}
+}
+
+func TestOversizedRequestIsRefused(t *testing.T) {
+	big := `{"url":"http://example.com/","body":"` + strings.Repeat("a", maxRequest) + `"}`
+	rec := httptest.NewRecorder()
+	ProxyHandler(rec, httptest.NewRequest("POST", "/proxy", strings.NewReader(big)))
+	if rec.Code != 413 || !strings.Contains(rec.Body.String(), "request_too_large") {
+		t.Errorf("status %d body %s", rec.Code, rec.Body.String())
 	}
 }
 

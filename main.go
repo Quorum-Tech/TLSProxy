@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	up "net/url"
 	"os"
@@ -28,6 +30,97 @@ var upstreamProxy = strings.TrimSpace(os.Getenv("TLSPROXY_UPSTREAM_PROXY"))
 // insecureSkipVerify accepts any certificate, for checking header order against a local
 // capture server with a self-signed certificate. Never set it on a server that fetches pages.
 var insecureSkipVerify = os.Getenv("TLSPROXY_INSECURE_SKIP_VERIFY") == "1"
+
+// token, when set, is required as "Authorization: Bearer <token>" on every endpoint. Anyone
+// who can reach TLSProxy can make it fetch any address (internal ones included) and read the
+// shared cookie jar, so a server listening beyond loopback must set one, or say plainly
+// with TLSPROXY_ALLOW_UNAUTHENTICATED=1 that something else (a firewall) guards it.
+var token = os.Getenv("TLSPROXY_TOKEN")
+
+const (
+	// maxRequest caps a request to TLSProxy; a larger one is refused, never cut short
+	maxRequest = 1 << 20
+	// maxRedirects is Chrome's own limit on a redirect chain
+	maxRedirects = 20
+)
+
+var errTooManyRedirects = errors.New("too_many_redirects")
+
+var redirectStatus = map[int]bool{301: true, 302: true, 303: true, 307: true, 308: true}
+
+// guard requires the token, when one is set.
+func guard(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if token != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
+			fail(w, 401, "unauthorized")
+			return
+		}
+		h(w, r)
+	}
+}
+
+// bindAllowed refuses an address beyond loopback with no token, unless allowUnauthenticated is "1".
+func bindAllowed(addr, tok, allowUnauthenticated string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	loopback := strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback())
+	if loopback || tok != "" || allowUnauthenticated == "1" {
+		return nil
+	}
+	return errors.New("TLSPROXY_ADDR " + addr + " is reachable beyond this machine and TLSPROXY_TOKEN is empty: set a token, or set TLSPROXY_ALLOW_UNAUTHENTICATED=1 if a firewall already limits who can reach it")
+}
+
+func withoutHeader(h map[string]string, name string) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, v := range h {
+		if !strings.EqualFold(k, name) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// sendFollowing sends the request. A preset request follows its redirects itself: Chrome
+// works out Sec-Fetch-Site, Referer, Origin and the cookie again for every hop, from where
+// that hop goes, and a client following redirects on its own would resend the first hop's.
+func sendFollowing(data proxyRequest, target *up.URL, headers fhttp.Header, payload []byte, o sendOptions) ([]byte, fhttp.Header, int, error) {
+	method := strings.ToUpper(data.Method)
+	if data.Preset == "" {
+		return SendTLSRequest(method, data.URL, headers, payload, o)
+	}
+	follow := o.followRedirects
+	o.followRedirects = false
+	custom := data.Headers
+	hop := target
+	var chain []*up.URL
+	for n := 0; ; n++ {
+		response, resHeaders, status, err := SendTLSRequest(method, hop.String(), headers, payload, o)
+		if err != nil || !follow || !redirectStatus[status] {
+			return response, resHeaders, status, err
+		}
+		loc := resHeaders.Get("Location")
+		next, perr := hop.Parse(loc)
+		if loc == "" || perr != nil || (next.Scheme != "http" && next.Scheme != "https") {
+			return response, resHeaders, status, nil
+		}
+		if n+1 >= maxRedirects {
+			return nil, nil, 500, errTooManyRedirects
+		}
+		// as a browser does: a 303, or a 301 or 302 answering a POST, is followed with a GET and no body
+		if (status == 303 && method != "HEAD") || ((status == 301 || status == 302) && method == "POST") {
+			method, payload = "GET", nil
+			custom = withoutHeader(custom, "content-type")
+		}
+		chain = append(chain, hop)
+		hop = next
+		if headers, err = presetHeaders(data.Preset, hop, method, data.Referer, custom, chain); err != nil {
+			return nil, nil, 500, err
+		}
+	}
+}
 
 // legacyHeaders are the original fixed headers, for requests that name no preset.
 func legacyHeaders(host string, custom map[string]string, dontIncludeOptionalHeaders bool) fhttp.Header {
@@ -120,9 +213,14 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid_request_method")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	// one byte past the cap tells an oversized request from one that is exactly the cap
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequest+1))
 	if err != nil {
 		fail(w, 400, "bad_request_body")
+		return
+	}
+	if len(body) > maxRequest {
+		fail(w, 413, "request_too_large")
 		return
 	}
 	var data proxyRequest
@@ -156,7 +254,7 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	var headers fhttp.Header
 	if data.Preset != "" {
-		if headers, err = presetHeaders(data.Preset, target, strings.ToUpper(data.Method), data.Referer, data.Headers); err != nil {
+		if headers, err = presetHeaders(data.Preset, target, strings.ToUpper(data.Method), data.Referer, data.Headers, nil); err != nil {
 			fail(w, 400, err.Error())
 			return
 		}
@@ -174,7 +272,10 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	if data.FollowRedirects != nil {
 		o.followRedirects = *data.FollowRedirects
 	}
-	if !data.Isolated {
+	if data.Isolated {
+		// one jar for every hop of this request, and for no other request
+		o.jar, _ = cookiejar.New(nil)
+	} else {
 		mu.Lock()
 		o.jar = cookies
 		seen := false
@@ -194,13 +295,17 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 	if data.Payload != "" {
 		payload = []byte(data.Payload)
 	}
-	response, resHeaders, status, err := SendTLSRequest(strings.ToUpper(data.Method), data.URL, headers, payload, o)
+	response, resHeaders, status, err := sendFollowing(data, target, headers, payload, o)
 	if err != nil {
 		w.Header().Set("X-Tlsproxy-Route", route)
 		// the reason, never the proxy URL: it carries a credential
 		log.Printf("request failed: route=%s host=%s", route, target.Host)
 		if errors.Is(err, errTooLarge) {
 			fail(w, 502, "response_too_large")
+			return
+		}
+		if errors.Is(err, errTooManyRedirects) {
+			fail(w, 502, "too_many_redirects")
 			return
 		}
 		fail(w, 502, "proxied_request_failed")
@@ -247,9 +352,14 @@ func GetCookies(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "invalid_request_method")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	// one byte past the cap tells an oversized request from one that is exactly the cap
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequest+1))
 	if err != nil {
 		fail(w, 400, "bad_request_body")
+		return
+	}
+	if len(body) > maxRequest {
+		fail(w, 413, "request_too_large")
 		return
 	}
 	var data struct {
@@ -305,11 +415,14 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:7738"
 	}
-	http.HandleFunc("/proxy", ProxyHandler)
-	http.HandleFunc("/reset-cookies", ResetCookies)
-	http.HandleFunc("/get-cookies", GetCookies)
-	http.HandleFunc("/get-all-cookies", GetAllCookies)
-	log.Printf("tlsproxy on %s, chrome %d, upstream proxy %t", addr, chromeMajor, upstreamProxy != "")
+	if err := bindAllowed(addr, token, os.Getenv("TLSPROXY_ALLOW_UNAUTHENTICATED")); err != nil {
+		log.Fatal(err)
+	}
+	http.HandleFunc("/proxy", guard(ProxyHandler))
+	http.HandleFunc("/reset-cookies", guard(ResetCookies))
+	http.HandleFunc("/get-cookies", guard(GetCookies))
+	http.HandleFunc("/get-all-cookies", guard(GetAllCookies))
+	log.Printf("tlsproxy on %s, chrome %d, upstream proxy %t, token %t", addr, chromeMajor, upstreamProxy != "", token != "")
 	if insecureSkipVerify {
 		log.Printf("WARNING: TLSPROXY_INSECURE_SKIP_VERIFY=1, certificates are not checked; for header capture tests only")
 	}

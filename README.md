@@ -12,6 +12,12 @@ TLSPROXY_UPSTREAM_PROXY=http://u:p@h:p  # optional: the proxy a request with "pr
 go build -o tlsproxy . && ./tlsproxy
 ```
 
+Anyone who can reach TLSProxy can make it fetch any address, internal ones included, and
+read its shared cookie jar. `TLSPROXY_TOKEN` requires `Authorization: Bearer <token>` on
+every endpoint. TLSProxy refuses to start on an address beyond loopback without a token,
+unless `TLSPROXY_ALLOW_UNAUTHENTICATED=1` says that something else (a firewall allowing only
+known callers) already guards it.
+
 `TLSPROXY_INSECURE_SKIP_VERIFY=1` turns certificate checks off. It exists only for the
 header capture check below, against a local server with a self-signed certificate; never
 set it on a server that fetches pages.
@@ -45,6 +51,10 @@ set it on a server that fetches pages.
   headers a page script sets. A `cookie` goes in Chrome's cookie slot.
 - `isolated` uses a cookie jar for this request alone instead of the shared one.
 - `followRedirects` (default true) set to false hands a redirect back with its `Location`.
+  A preset request follows redirects itself (up to Chrome's 20), working its headers out
+  again for each hop as Chrome does: `Sec-Fetch-Site` across the whole chain, `Referer` for
+  the new address, `Origin: null` once a hop has crossed origins, no caller cookie at another
+  origin, and a 303 (or a 301/302 answering a POST) followed with a GET and no body.
 - `proxy`: `false` or absent goes out directly; `true` uses `TLSPROXY_UPSTREAM_PROXY`; a
   string is a proxy URL for this request alone (`http`, `https`, `socks5` or `socks5h`,
   with host and port).
@@ -52,9 +62,11 @@ set it on a server that fetches pages.
 The response is the site's status, headers and body (decompressed). `X-Tlsproxy-Route`
 says how the request went out: `direct`, `upstream` or `request`; a caller that asked for
 a proxy should check it. A failure is `502` with `{"error": true, "message": …}`, where the
-message is `proxied_request_failed` or `response_too_large` (over 32 MB). A bad request is
-`400` with `unknown_preset`, `method_not_allowed_for_preset`, `bad_referer`, `bad_proxy`,
-`no_upstream_proxy`, `bad_url` or `no_url_provided`. Errors never contain a proxy URL.
+message is `proxied_request_failed`, `response_too_large` (over 32 MB) or
+`too_many_redirects`. A bad request is `400` with `unknown_preset`,
+`method_not_allowed_for_preset`, `bad_referer`, `bad_proxy`, `no_upstream_proxy`, `bad_url`
+or `no_url_provided`; a request over 1 MB is `413 request_too_large`, and a missing or wrong
+token `401 unauthorized`. Errors never contain a proxy URL.
 
 ## Keeping up with Chrome
 

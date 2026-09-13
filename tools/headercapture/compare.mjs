@@ -24,6 +24,13 @@ const cases = [
   ["/cross.png", "image", "GET", null, {}, false, true],
   ["/api/fetch-cross", "fetch", "GET", null, {}, false, true],
   ["/api/post-cross", "fetch", "POST", "x", { "content-type": "text/plain" }, false, true],
+  // followed redirects to another site: compared at the address the redirect led to
+  ["/r/img", "image", "GET", null, {}, true, false, "/after-img.png"],
+  ["/r/fetch", "fetch", "GET", null, {}, true, false, "/api/after-fetch"],
+  ["/r/frame", "iframe", "GET", null, {}, true, false, "/after-frame"],
+  ["/cross-frame", "iframe", "GET", null, {}, false, true],
+  // a typed address (no referer, no cookie yet) that redirects to another site
+  ["/r/nav", "navigate", "GET", null, {}, false, false, "/after-nav"],
 ];
 
 let failures = 0;
@@ -36,9 +43,9 @@ for (const proto of ["h2", "h1"]) {
   await new Promise((r) => setTimeout(r, 800));
   const base = proto === "h2" ? `https://localhost:${h2port}` : `http://localhost:${h1port}`;
   const cross = proto === "h2" ? `https://127.0.0.1:${h2port}` : `http://127.0.0.1:${h1port}`;
-  for (const [path, preset, method = "GET", body = null, headers = {}, cookie = false, isCross = false] of cases) {
+  for (const [path, preset, method = "GET", body = null, headers = {}, cookie = false, isCross = false, redirectedTo = null] of cases) {
     const url = (isCross ? cross : base) + path;
-    const req = { url, preset, method, isolated: true, followRedirects: false, timeoutSeconds: 10,
+    const req = { url, preset, method, isolated: true, followRedirects: !!redirectedTo, timeoutSeconds: 10,
       headers: { ...headers, ...(cookie ? { cookie: "s=1; t=2" } : {}) },
       ...(preset === "navigate" ? {} : { referer: base + "/" }), ...(body !== null ? { body } : {}) };
     const r = await fetch(tlsproxy + "/proxy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(req) });
@@ -56,7 +63,8 @@ for (const proto of ["h2", "h1"]) {
     continue;
   }
   const ours = JSON.parse(readFileSync(out, "utf8"));
-  for (const [path] of cases) {
+  for (const [first, , , , , , , redirectedTo] of cases) {
+    const path = redirectedTo ?? first;
     const c = chrome.find((x) => x.path === path), o = ours.find((x) => x.path === path);
     if (!c || !o) { console.log(proto, path.padEnd(22), !c ? "not in Chrome capture" : "not received from TLSProxy"); failures++; continue; }
     const same = JSON.stringify(c.names) === JSON.stringify(o.names);
@@ -70,6 +78,7 @@ for (const proto of ["h2", "h1"]) {
     const refShape = (v) => (v ?? "").replace(/:\d+/, ":PORT");
     if (refShape(c.values.referer) !== refShape(o.values.referer)) valueDiffs.push(`referer: chrome ${c.values.referer} ours ${o.values.referer}`);
     if (!!c.values.origin !== !!o.values.origin) valueDiffs.push(`origin present: chrome ${!!c.values.origin} ours ${!!o.values.origin}`);
+    else if ((c.values.origin === "null") !== (o.values.origin === "null")) valueDiffs.push(`origin: chrome ${c.values.origin} ours ${o.values.origin}`);
     if (same && valueDiffs.length === 0) console.log(proto, path.padEnd(22), "match");
     else {
       failures++;
