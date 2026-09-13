@@ -25,6 +25,10 @@ var (
 // through, from TLSPROXY_UPSTREAM_PROXY. It holds a credential: never logged.
 var upstreamProxy = strings.TrimSpace(os.Getenv("TLSPROXY_UPSTREAM_PROXY"))
 
+// insecureSkipVerify accepts any certificate, for checking header order against a local
+// capture server with a self-signed certificate. Never set it on a server that fetches pages.
+var insecureSkipVerify = os.Getenv("TLSPROXY_INSECURE_SKIP_VERIFY") == "1"
+
 // legacyHeaders are the original fixed headers, for requests that name no preset.
 func legacyHeaders(host string, custom map[string]string, dontIncludeOptionalHeaders bool) fhttp.Header {
 	headers := fhttp.Header{
@@ -38,10 +42,10 @@ func legacyHeaders(host string, custom map[string]string, dontIncludeOptionalHea
 		"sec-fetch-dest":     {"empty"},
 		"sec-fetch-mode":     {"cors"},
 		"sec-fetch-site":     {"same-site"},
-		"user-agent":         {navigateHeaders(chromeMajor)[4].value},
+		"user-agent":         {userAgent(chromeMajor)},
 	}
 	if dontIncludeOptionalHeaders {
-		headers = fhttp.Header{"user-agent": {navigateHeaders(chromeMajor)[4].value}}
+		headers = fhttp.Header{"user-agent": {userAgent(chromeMajor)}}
 	}
 	for k, v := range custom {
 		headers[k] = []string{v}
@@ -56,8 +60,12 @@ type proxyRequest struct {
 	Payload        string            `json:"payload"`
 	Body           string            `json:"body"`
 	UseBaseHeaders bool              `json:"useBaseHeaders"`
-	// "navigate": Chrome's headers for a page typed into the address bar, in Chrome's order
+	// Chrome's headers, in Chrome's order, for one kind of request: "navigate" (a page typed
+	// into the address bar), "iframe", "style", "script", "module", "font", "image",
+	// "fetch" or "xhr". Only fetch and xhr may carry a body.
 	Preset string `json:"preset"`
+	// the page the request comes from, for Sec-Fetch-Site, Referer and Origin; empty for a typed navigation
+	Referer string `json:"referer"`
 	// a cookie jar for this request alone, instead of the shared one
 	Isolated bool `json:"isolated"`
 	// default true; false hands a redirect back with its Location
@@ -148,15 +156,15 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	var headers fhttp.Header
 	if data.Preset != "" {
-		if headers, err = presetHeaders(data.Preset, data.Headers); err != nil {
-			fail(w, 400, "unknown_preset")
+		if headers, err = presetHeaders(data.Preset, target, strings.ToUpper(data.Method), data.Referer, data.Headers); err != nil {
+			fail(w, 400, err.Error())
 			return
 		}
 	} else {
 		headers = legacyHeaders(target.Host, data.Headers, data.UseBaseHeaders)
 	}
 
-	o := sendOptions{timeoutSeconds: data.TimeoutSeconds, followRedirects: true, proxyURL: proxyURL}
+	o := sendOptions{timeoutSeconds: data.TimeoutSeconds, followRedirects: true, proxyURL: proxyURL, insecure: insecureSkipVerify}
 	if o.timeoutSeconds <= 0 {
 		o.timeoutSeconds = 30
 	}
@@ -187,19 +195,25 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 		payload = []byte(data.Payload)
 	}
 	response, resHeaders, status, err := SendTLSRequest(strings.ToUpper(data.Method), data.URL, headers, payload, o)
-	w.Header().Set("X-Tlsproxy-Route", route)
 	if err != nil {
+		w.Header().Set("X-Tlsproxy-Route", route)
 		// the reason, never the proxy URL: it carries a credential
 		log.Printf("request failed: route=%s host=%s", route, target.Host)
+		if errors.Is(err, errTooLarge) {
+			fail(w, 502, "response_too_large")
+			return
+		}
 		fail(w, 502, "proxied_request_failed")
 		return
 	}
 	for k, vs := range resHeaders {
-		if strings.EqualFold(k, "Content-Encoding") || strings.EqualFold(k, "Content-Length") || len(vs) == 0 {
+		// the site's own copy of our route header is dropped: the route is ours to report
+		if strings.EqualFold(k, "Content-Encoding") || strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "X-Tlsproxy-Route") || len(vs) == 0 {
 			continue
 		}
 		w.Header().Set(k, vs[0])
 	}
+	w.Header().Set("X-Tlsproxy-Route", route)
 	w.WriteHeader(status)
 	w.Write(response)
 }
@@ -296,5 +310,8 @@ func main() {
 	http.HandleFunc("/get-cookies", GetCookies)
 	http.HandleFunc("/get-all-cookies", GetAllCookies)
 	log.Printf("tlsproxy on %s, chrome %d, upstream proxy %t", addr, chromeMajor, upstreamProxy != "")
+	if insecureSkipVerify {
+		log.Printf("WARNING: TLSPROXY_INSECURE_SKIP_VERIFY=1, certificates are not checked; for header capture tests only")
+	}
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

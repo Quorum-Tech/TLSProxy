@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -29,12 +30,49 @@ func TestSecChUaMatchesRealChrome(t *testing.T) {
 	for major, want := range map[int]string{
 		124: `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`,
 		131: `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`,
-		153: `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"`, // captured from Chrome 153
-		154: `"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"`,  // what the deployed build sent
+		153: `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"`,  // captured from Chrome 153
+		154: `"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"`, // what the deployed build sent
 	} {
 		if got := secChUa(major); got != want {
 			t.Errorf("Chrome %d: got %s, want %s", major, got, want)
 		}
+	}
+}
+
+func TestSiteRefererAndOrigin(t *testing.T) {
+	u := func(s string) *url.URL { v, _ := url.Parse(s); return v }
+	page := u("https://www.example.co.uk/pricing?plan=pro#faq")
+	cases := []struct {
+		target, site, referer string
+	}{
+		{"https://www.example.co.uk/api/prices", "same-origin", "https://www.example.co.uk/pricing?plan=pro"},
+		{"https://cdn.example.co.uk/app.js", "same-site", "https://www.example.co.uk/"},
+		{"https://cdn.other.co.uk/app.js", "cross-site", "https://www.example.co.uk/"},
+		{"http://www.example.co.uk/old", "cross-site", ""}, // https page to http: no referer, and another scheme is another site
+	}
+	for _, c := range cases {
+		if got := siteOf(page, u(c.target), false); got != c.site {
+			t.Errorf("site %s: got %s want %s", c.target, got, c.site)
+		}
+		if got := refererValue(page, u(c.target)); got != c.referer {
+			t.Errorf("referer %s: got %q want %q", c.target, got, c.referer)
+		}
+	}
+	if siteOf(nil, u("https://example.com/"), true) != "none" {
+		t.Error("a typed navigation is site none")
+	}
+	h, err := presetHeaders("fetch", u("https://api.other.com/v1"), "POST", "https://www.example.co.uk/app", map[string]string{"Content-Type": "application/json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Get("Origin") != "https://www.example.co.uk" || h.Get("Sec-Fetch-Site") != "cross-site" || h.Get("Referer") != "https://www.example.co.uk/" {
+		t.Errorf("cross-site POST: origin %q site %q referer %q", h.Get("Origin"), h.Get("Sec-Fetch-Site"), h.Get("Referer"))
+	}
+	if _, err := presetHeaders("image", u("https://example.com/a.png"), "POST", "", nil); err != errPresetMethod {
+		t.Errorf("an image with a body: %v", err)
+	}
+	if _, err := presetHeaders("script", u("https://example.com/a.js"), "GET", "javascript:alert(1)", nil); err != errBadReferer {
+		t.Errorf("a referer that is not a web address: %v", err)
 	}
 }
 
@@ -85,7 +123,7 @@ func TestNavigateSendsChromeHeadersInOrder(t *testing.T) {
 				break
 			}
 			if i := strings.Index(line, ":"); i > 0 && !strings.HasPrefix(line, "GET ") {
-				names = append(names, strings.ToLower(line[:i]))
+				names = append(names, line[:i]) // as spelled on the wire
 			}
 		}
 		got <- names
@@ -96,15 +134,17 @@ func TestNavigateSendsChromeHeadersInOrder(t *testing.T) {
 		t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
 	}
 	names := <-got
-	want := []string{"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "upgrade-insecure-requests", "user-agent", "accept", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest", "accept-encoding", "accept-language", "priority"}
+	// Chrome 153 typing an http:// address, captured from a raw socket: Host and Connection
+	// first, client hints lower case, the rest Title-Case, and no priority on HTTP/1.1
+	want := []string{"Host", "Connection", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "Upgrade-Insecure-Requests", "User-Agent", "Accept", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-User", "Sec-Fetch-Dest", "Accept-Encoding", "Accept-Language"}
 	var filtered []string
 	for _, n := range names {
-		if n != "host" && n != "connection" && n != "content-length" {
+		if !strings.EqualFold(n, "content-length") {
 			filtered = append(filtered, n)
 		}
 	}
 	if strings.Join(filtered, ",") != strings.Join(want, ",") {
-		t.Errorf("header order\n got %v\nwant %v", filtered, want)
+		t.Errorf("header order and spelling\n got %v\nwant %v", filtered, want)
 	}
 	if rec.Header().Get("X-Tlsproxy-Route") != "direct" {
 		t.Errorf("route %q", rec.Header().Get("X-Tlsproxy-Route"))
