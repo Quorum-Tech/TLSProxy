@@ -106,7 +106,8 @@ func sendFollowing(data proxyRequest, target *up.URL, headers fhttp.Header, payl
 		if loc == "" || perr != nil || (next.Scheme != "http" && next.Scheme != "https") {
 			return response, resHeaders, status, nil
 		}
-		if n+1 >= maxRedirects {
+		// this is redirect n+1: Chrome follows 20 and fails on the 21st
+		if n+1 > maxRedirects {
 			return nil, nil, 500, errTooManyRedirects
 		}
 		// as a browser does: a 303, or a 301 or 302 answering a POST, is followed with a GET and no body

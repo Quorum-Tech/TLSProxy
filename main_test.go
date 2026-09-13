@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -268,6 +269,27 @@ func TestTaintedOriginAfterRedirectBetweenOtherOrigins(t *testing.T) {
 	h, _ = presetHeaders("fetch", u("https://c.other.net/data"), "GET", page, nil, []*url.URL{u("https://app.example.com/r")})
 	if h.Get("Origin") != "https://app.example.com" {
 		t.Errorf("same-origin address redirecting away: origin %q", h.Get("Origin"))
+	}
+}
+
+// Chrome follows 20 redirects and fails on the 21st; so does a preset request.
+func TestRedirectLimitIsChromes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var left int
+		if _, err := fmt.Sscanf(r.URL.Path, "/r/%d", &left); err != nil || left == 0 {
+			w.Write([]byte("end"))
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/r/%d", left-1), http.StatusFound)
+	}))
+	defer srv.Close()
+	rec := call(t, map[string]any{"url": srv.URL + "/r/20", "preset": "navigate", "isolated": true})
+	if rec.Code != 200 || rec.Body.String() != "end" {
+		t.Errorf("20 redirects: status %d body %q", rec.Code, rec.Body.String())
+	}
+	rec = call(t, map[string]any{"url": srv.URL + "/r/21", "preset": "navigate", "isolated": true})
+	if rec.Code != 502 || !strings.Contains(rec.Body.String(), "too_many_redirects") {
+		t.Errorf("21 redirects: status %d body %q", rec.Code, rec.Body.String())
 	}
 }
 
